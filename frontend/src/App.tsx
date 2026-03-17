@@ -7,8 +7,8 @@ import Dashboard from './pages/Dashboard';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5000,
-      retry: 2,
+      staleTime: 30000,
+      retry: false,
     },
   },
 });

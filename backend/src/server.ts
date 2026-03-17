@@ -7,7 +7,6 @@ import { env } from './config/env';
 import { initDatabase } from './config/database';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
-import { apiLimiter } from './middleware/rateLimiter';
 import { stripSensitiveHeaders } from './middleware/security';
 import { MediaController } from './controllers/mediaController';
 import uploadRoutes from './routes/uploadRoutes';
@@ -30,7 +29,6 @@ app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) }
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(stripSensitiveHeaders);
-app.use(apiLimiter);
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/media', mediaRoutes);

@@ -10,9 +10,9 @@ export const env = {
   db: {
     host: process.env.DB_HOST || '127.0.0.1',
     port: parseInt(process.env.DB_PORT || '3306', 10),
-    user: process.env.DB_USER || 'sumitkumar',
+    user: process.env.DB_USER || 'no_user_found_from_backend_env_file',
     password: process.env.DB_PASSWORD || '',
-    name: process.env.DB_NAME || 'media_storage_service',
+    name: process.env.DB_NAME || 'no_database_found_from_backend_env_file',
   },
 
   redis: {

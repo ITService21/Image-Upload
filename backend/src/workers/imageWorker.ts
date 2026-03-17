@@ -12,8 +12,6 @@ interface ImageJobData {
   compressionMethod: CompressionMethod;
 }
 
-const MAX_RETRIES = 3;
-
 const imageWorker = new Worker<ImageJobData>(
   'image-processing',
   async (job: Job<ImageJobData>) => {
@@ -40,24 +38,10 @@ const imageWorker = new Worker<ImageJobData>(
       logger.info(`Image ${mediaId} processed successfully`);
       return result;
     } catch (error: any) {
-      const media = await MediaService.getById(mediaId);
-      const retryCount = (media?.retry_count || 0) + 1;
-
-      if (retryCount < MAX_RETRIES) {
-        await MediaService.update(mediaId, {
-          retry_count: retryCount,
-          error_message: error.message,
-          status: 'pending',
-        });
-        throw error;
-      }
-
       await MediaService.updateStatus(mediaId, 'failed', {
         error_message: error.message,
-        retry_count: retryCount,
       } as any);
-
-      logger.error(`Image ${mediaId} processing failed after ${retryCount} retries:`, error);
+      logger.error(`Image ${mediaId} processing failed:`, error);
     }
   },
   {

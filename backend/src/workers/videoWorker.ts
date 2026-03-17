@@ -10,8 +10,6 @@ interface VideoJobData {
   outputFilename: string;
 }
 
-const MAX_RETRIES = 3;
-
 const videoWorker = new Worker<VideoJobData>(
   'video-processing',
   async (job: Job<VideoJobData>) => {
@@ -45,24 +43,10 @@ const videoWorker = new Worker<VideoJobData>(
       logger.info(`Video ${mediaId} processed successfully`);
       return result;
     } catch (error: any) {
-      const media = await MediaService.getById(mediaId);
-      const retryCount = (media?.retry_count || 0) + 1;
-
-      if (retryCount < MAX_RETRIES) {
-        await MediaService.update(mediaId, {
-          retry_count: retryCount,
-          error_message: error.message,
-          status: 'pending',
-        });
-        throw error;
-      }
-
       await MediaService.updateStatus(mediaId, 'failed', {
         error_message: error.message,
-        retry_count: retryCount,
       } as any);
-
-      logger.error(`Video ${mediaId} processing failed after ${retryCount} retries:`, error);
+      logger.error(`Video ${mediaId} processing failed:`, error);
     }
   },
   {

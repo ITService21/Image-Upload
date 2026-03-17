@@ -20,7 +20,6 @@ export function useMediaList(page = 1) {
         status: statusFilter === 'all' ? undefined : statusFilter === 'pending' ? 'pending' : statusFilter,
         search: searchQuery || undefined,
       }),
-    refetchInterval: 5000,
   });
 }
 
@@ -28,7 +27,6 @@ export function useMediaStats(companyId?: number) {
   return useQuery({
     queryKey: ['mediaStats', companyId],
     queryFn: () => mediaApi.getStats(companyId ?? undefined),
-    refetchInterval: 5000,
   });
 }
 

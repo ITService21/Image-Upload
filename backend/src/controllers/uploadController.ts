@@ -85,13 +85,13 @@ export class UploadController {
               inputPath: file.path,
               outputFilename: fileName,
               compressionMethod: fileMethod,
-            }, { attempts: 3, backoff: { type: 'exponential', delay: 2000 } });
+            });
           } else if (isVideoType(mimeType)) {
             await videoQueue.add('compress', {
               mediaId: media.id,
               inputPath: file.path,
               outputFilename: fileName,
-            }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
+            });
           }
         } else {
           const thumbnailPath = isImageType(mimeType)
