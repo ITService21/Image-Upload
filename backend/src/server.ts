@@ -20,7 +20,12 @@ import './workers/videoWorker';
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+app.use(cors({
+  origin: env.nodeEnv === 'production'
+    ? ['https://piwebtechnology.com']
+    : ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+}));
 app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

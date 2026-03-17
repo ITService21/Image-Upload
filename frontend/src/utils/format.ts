@@ -1,3 +1,5 @@
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -17,7 +19,7 @@ export function formatDate(dateStr: string): string {
 }
 
 export function getMediaUrl(id: number, type: 'original' | 'compressed' | 'thumbnail'): string {
-  return `/api/media/${id}/${type}`;
+  return `${BACKEND_URL}/api/media/${id}/${type}`;
 }
 
 export function isImage(mimeType: string): boolean {
