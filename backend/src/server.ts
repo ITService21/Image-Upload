@@ -20,9 +20,13 @@ const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: env.nodeEnv === 'production'
-    ? ['https://piwebtechnology.com']
-    : ['http://localhost:5173', 'http://localhost:3000'],
+  origin: [
+    'https://piwebtechnology.com',
+    'https://www.piwebtechnology.com',
+    'http://piwebtechnology.com',
+    'http://localhost:5173',
+    'http://localhost:4000',
+  ],
   credentials: true,
 }));
 app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
