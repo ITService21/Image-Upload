@@ -8,7 +8,10 @@ export class CompanyService {
     const slug = slugifyCompany(companyName);
 
     let company = await db('companies').where({ slug }).first();
-    if (company) return company;
+    if (company) {
+      logger.debug('Company found', { id: company.id, slug });
+      return company;
+    }
 
     try {
       const [id] = await db('companies').insert({
@@ -16,12 +19,14 @@ export class CompanyService {
         slug,
       });
       company = await db('companies').where({ id }).first();
-      logger.info(`Created company: ${companyName} (${slug})`);
+      logger.info('Company created', { id, companyName, slug });
       return company;
     } catch (error: any) {
       if (error.code === 'ER_DUP_ENTRY') {
+        logger.debug('Company duplicate entry, returning existing', { slug });
         return db('companies').where({ slug }).first();
       }
+      logger.error('Company creation failed', { companyName, error: error.message });
       throw error;
     }
   }

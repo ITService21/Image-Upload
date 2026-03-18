@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import path from 'path';
-import fs from 'fs/promises';
 import { CompanyService } from '../services/companyService';
 import { MediaService } from '../services/mediaService';
 import { CompressionService } from '../services/compressionService';
@@ -13,6 +12,7 @@ import { env } from '../config/env';
 
 export class UploadController {
   static async upload(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
@@ -23,6 +23,13 @@ export class UploadController {
       if (!companyName) {
         throw new ValidationError('Company name is required');
       }
+
+      logger.info('Upload started', {
+        requestId: rid,
+        companyName,
+        fileCount: files.length,
+        totalSize: files.reduce((s, f) => s + f.size, 0),
+      });
 
       const compressionEnabled = req.body.compressionEnabled !== 'false';
       const defaultMethod: CompressionMethod = req.body.compressionMethod || 'sharp';
@@ -62,6 +69,14 @@ export class UploadController {
 
         const fileMethod = fileCompressionMethods[file.originalname] || defaultMethod;
 
+        logger.debug('Creating media record', {
+          requestId: rid,
+          originalName: file.originalname,
+          mimeType,
+          size: file.size,
+          method: fileMethod,
+        });
+
         const media = await MediaService.create({
           company_id: company.id,
           file_name: fileName,
@@ -86,12 +101,14 @@ export class UploadController {
               outputFilename: fileName,
               compressionMethod: fileMethod,
             });
+            logger.info('Image queued for compression', { requestId: rid, mediaId: media.id, method: fileMethod });
           } else if (isVideoType(mimeType)) {
             await videoQueue.add('compress', {
               mediaId: media.id,
               inputPath: file.path,
               outputFilename: fileName,
             });
+            logger.info('Video queued for compression', { requestId: rid, mediaId: media.id });
           }
         } else {
           const thumbnailPath = isImageType(mimeType)
@@ -107,21 +124,31 @@ export class UploadController {
         results.push(media);
       }
 
+      logger.info('Upload completed', {
+        requestId: rid,
+        companyName,
+        mediaIds: results.map((r) => r.id),
+      });
+
       res.status(201).json({
         success: true,
         data: results,
         message: `${files.length} file(s) uploaded successfully`,
       });
     } catch (error) {
+      logger.error('Upload failed', { requestId: rid, error: (error as Error).message, stack: (error as Error).stack });
       next(error);
     }
   }
 
   static async retryProcessing(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const { id } = req.params;
       const media = await MediaService.getById(Number(id));
       if (!media) throw new ValidationError('Media not found');
+
+      logger.info('Retry processing requested', { requestId: rid, mediaId: Number(id), fileType: media.file_type });
 
       await MediaService.update(Number(id), {
         status: 'pending',
@@ -144,8 +171,10 @@ export class UploadController {
         });
       }
 
+      logger.info('Retry queued', { requestId: rid, mediaId: Number(id) });
       res.json({ success: true, message: 'Retry queued' });
     } catch (error) {
+      logger.error('Retry failed', { requestId: rid, error: (error as Error).message });
       next(error);
     }
   }

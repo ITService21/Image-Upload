@@ -24,6 +24,13 @@ export class VideoService {
     const originalStats = await fs.stat(inputPath);
     const metadata = await this.getVideoMetadata(inputPath);
 
+    logger.info('Video compression started', {
+      file: outputFilename,
+      originalSize: originalStats.size,
+      duration: metadata.duration,
+      resolution: `${metadata.width}x${metadata.height}`,
+    });
+
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
         .outputOptions([
@@ -38,6 +45,12 @@ export class VideoService {
         .on('end', async () => {
           try {
             const compressedStats = await fs.stat(outputPath);
+            logger.info('Video compression completed', {
+              file: outputFilename,
+              originalSize: originalStats.size,
+              compressedSize: compressedStats.size,
+              ratio: `${((1 - compressedStats.size / originalStats.size) * 100).toFixed(1)}%`,
+            });
             resolve({
               compressedPath: outputPath,
               compressedSize: compressedStats.size,
@@ -52,7 +65,7 @@ export class VideoService {
           }
         })
         .on('error', (err) => {
-          logger.error('Video compression failed:', err);
+          logger.error('Video compression failed', { file: outputFilename, error: err.message });
           reject(err);
         })
         .run();
@@ -64,6 +77,8 @@ export class VideoService {
     await ensureDir(thumbDir);
     const outputPath = path.join(thumbDir, `thumb_${outputFilename.replace(/\.[^.]+$/, '.jpg')}`);
 
+    logger.debug('Generating video thumbnail', { file: outputFilename });
+
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
         .screenshots({
@@ -73,7 +88,10 @@ export class VideoService {
           size: '300x300',
         })
         .on('end', () => resolve(outputPath))
-        .on('error', reject);
+        .on('error', (err) => {
+          logger.warn('Video thumbnail generation failed', { file: outputFilename, error: err.message });
+          reject(err);
+        });
     });
   }
 

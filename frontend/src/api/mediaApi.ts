@@ -31,6 +31,7 @@ export const mediaApi = {
     return data.data;
   },
 
+  
   getCompanies: async (): Promise<Company[]> => {
     const { data } = await api.get('/media/companies');
     return data.data;

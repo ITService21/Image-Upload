@@ -17,7 +17,7 @@ const imageWorker = new Worker<ImageJobData>(
   async (job: Job<ImageJobData>) => {
     const { mediaId, inputPath, outputFilename, compressionMethod } = job.data;
 
-    logger.info(`Processing image ${mediaId}: ${outputFilename}`);
+    logger.info('Image worker: job started', { jobId: job.id, mediaId, file: outputFilename, method: compressionMethod });
     await MediaService.updateStatus(mediaId, 'processing');
 
     try {
@@ -35,13 +35,25 @@ const imageWorker = new Worker<ImageJobData>(
         status: 'completed',
       });
 
-      logger.info(`Image ${mediaId} processed successfully`);
+      logger.info('Image worker: job completed', {
+        jobId: job.id,
+        mediaId,
+        originalSize: result.originalSize,
+        compressedSize: result.compressedSize,
+        ratio: `${result.compressionRatio.toFixed(1)}%`,
+      });
+
       return result;
     } catch (error: any) {
       await MediaService.updateStatus(mediaId, 'failed', {
         error_message: error.message,
       } as any);
-      logger.error(`Image ${mediaId} processing failed:`, error);
+      logger.error('Image worker: job failed', {
+        jobId: job.id,
+        mediaId,
+        error: error.message,
+        stack: error.stack,
+      });
     }
   },
   {
@@ -51,11 +63,11 @@ const imageWorker = new Worker<ImageJobData>(
 );
 
 imageWorker.on('completed', (job) => {
-  logger.info(`Image job ${job.id} completed`);
+  logger.debug('Image worker: event completed', { jobId: job.id });
 });
 
 imageWorker.on('failed', (job, err) => {
-  logger.error(`Image job ${job?.id} failed:`, err);
+  logger.error('Image worker: event failed', { jobId: job?.id, error: err.message });
 });
 
 export { imageWorker };

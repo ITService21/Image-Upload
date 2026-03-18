@@ -9,11 +9,16 @@ import { imageQueue } from '../config/queue';
 import { CompressionMethod } from '../types';
 import { env } from '../config/env';
 import { ensureDir } from '../utils/fileHelpers';
+import { logger } from '../utils/logger';
 
 export class MediaController {
   static async getAll(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const { companyId, status, search, page, limit } = req.query;
+
+      logger.debug('Fetching media list', { requestId: rid, companyId, status, search, page, limit });
+
       const result = await MediaService.getAll({
         companyId: companyId ? Number(companyId) : undefined,
         status: status as string,
@@ -22,16 +27,24 @@ export class MediaController {
         limit: limit ? Number(limit) : 50,
       });
 
+      logger.debug('Media list fetched', { requestId: rid, total: result.total, page: result.page });
+
       res.json({ success: true, ...result });
     } catch (error) {
+      logger.error('Failed to fetch media list', { requestId: rid, error: (error as Error).message });
       next(error);
     }
   }
 
   static async getById(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
-      const media = await MediaService.getById(Number(req.params.id));
+      const mediaId = Number(req.params.id);
+      logger.debug('Fetching media by ID', { requestId: rid, mediaId });
+
+      const media = await MediaService.getById(mediaId);
       if (!media) throw new NotFoundError('Media not found');
+
       res.json({ success: true, data: media });
     } catch (error) {
       next(error);
@@ -39,32 +52,50 @@ export class MediaController {
   }
 
   static async delete(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
-      const media = await MediaService.getById(Number(req.params.id));
+      const mediaId = Number(req.params.id);
+      const media = await MediaService.getById(mediaId);
       if (!media) throw new NotFoundError('Media not found');
-      await MediaService.delete(Number(req.params.id));
+
+      logger.info('Deleting media', { requestId: rid, mediaId, fileName: media.original_name });
+
+      await MediaService.delete(mediaId);
+
+      logger.info('Media deleted', { requestId: rid, mediaId });
       res.json({ success: true, message: 'Media deleted permanently' });
     } catch (error) {
+      logger.error('Delete failed', { requestId: rid, error: (error as Error).message });
       next(error);
     }
   }
 
   static async bulkDelete(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const { ids } = req.body;
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         throw new ValidationError('IDs array is required');
       }
+
+      logger.info('Bulk delete requested', { requestId: rid, count: ids.length, ids });
+
       await MediaService.bulkDelete(ids);
+
+      logger.info('Bulk delete completed', { requestId: rid, count: ids.length });
       res.json({ success: true, message: `${ids.length} media items deleted` });
     } catch (error) {
+      logger.error('Bulk delete failed', { requestId: rid, error: (error as Error).message });
       next(error);
     }
   }
 
   static async getStats(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const { companyId } = req.query;
+      logger.debug('Fetching stats', { requestId: rid, companyId });
+
       const stats = await MediaService.getStats(companyId ? Number(companyId) : undefined);
       res.json({ success: true, data: stats });
     } catch (error) {
@@ -73,8 +104,11 @@ export class MediaController {
   }
 
   static async serveFile(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const { companySlug, fileName } = req.params;
+      logger.debug('Serving public file', { requestId: rid, companySlug, fileName });
+
       const media = await MediaService.getPublicUrl(companySlug, fileName);
       if (!media) throw new NotFoundError('File not found');
 
@@ -96,6 +130,7 @@ export class MediaController {
   }
 
   static async serveOriginal(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media) throw new NotFoundError('Media not found');
@@ -104,6 +139,7 @@ export class MediaController {
       try {
         await fs.access(absolutePath);
       } catch {
+        logger.warn('Original file missing from disk', { requestId: rid, mediaId: media.id, path: media.storage_path });
         throw new NotFoundError('File not found on disk');
       }
 
@@ -115,6 +151,7 @@ export class MediaController {
   }
 
   static async serveCompressed(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media || !media.compressed_path) throw new NotFoundError('Compressed file not found');
@@ -123,6 +160,7 @@ export class MediaController {
       try {
         await fs.access(absolutePath);
       } catch {
+        logger.warn('Compressed file missing from disk', { requestId: rid, mediaId: media.id, path: media.compressed_path });
         throw new NotFoundError('File not found on disk');
       }
 
@@ -134,6 +172,7 @@ export class MediaController {
   }
 
   static async serveThumbnail(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media || !media.thumbnail_path) throw new NotFoundError('Thumbnail not found');
@@ -142,6 +181,7 @@ export class MediaController {
       try {
         await fs.access(absolutePath);
       } catch {
+        logger.warn('Thumbnail missing from disk', { requestId: rid, mediaId: media.id, path: media.thumbnail_path });
         throw new NotFoundError('Thumbnail not found on disk');
       }
 
@@ -154,12 +194,19 @@ export class MediaController {
   }
 
   static async editImage(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media) throw new NotFoundError('Media not found');
       if (media.file_type !== 'image') throw new ValidationError('Only images can be edited');
 
       const { crop, rotate, flip, flop, resize } = req.body;
+
+      logger.info('Editing image', {
+        requestId: rid,
+        mediaId: media.id,
+        operations: { crop: !!crop, rotate: rotate !== undefined, flip, flop, resize: !!resize },
+      });
 
       const inputPath = media.compressed_path || media.storage_path;
       const outputDir = path.resolve(env.upload.dir, 'original');
@@ -179,7 +226,6 @@ export class MediaController {
       await fs.rename(tempPath, path.resolve(media.storage_path));
 
       const dimensions = await CompressionService.getImageDimensions(path.resolve(media.storage_path));
-
       const stat = await fs.stat(path.resolve(media.storage_path));
 
       if (media.is_compressed) {
@@ -198,19 +244,25 @@ export class MediaController {
         status: media.is_compressed ? 'processing' : 'completed',
       });
 
+      logger.info('Image edit completed', { requestId: rid, mediaId: media.id, newSize: stat.size });
+
       res.json({ success: true, data: updated });
     } catch (error) {
+      logger.error('Image edit failed', { requestId: rid, error: (error as Error).message, stack: (error as Error).stack });
       next(error);
     }
   }
 
   static async recompress(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media) throw new NotFoundError('Media not found');
 
       const { compressionMethod } = req.body;
       const method: CompressionMethod = compressionMethod || 'sharp';
+
+      logger.info('Recompression requested', { requestId: rid, mediaId: media.id, method });
 
       await MediaService.update(media.id, {
         compression_method: method,
@@ -226,7 +278,6 @@ export class MediaController {
           compressionMethod: method,
         });
       } else {
-        // For video, use same queue
         const { videoQueue } = require('../config/queue');
         await videoQueue.add('compress', {
           mediaId: media.id,
@@ -235,16 +286,21 @@ export class MediaController {
         });
       }
 
+      logger.info('Recompression queued', { requestId: rid, mediaId: media.id, method });
       res.json({ success: true, message: `Recompression queued with ${method}` });
     } catch (error) {
+      logger.error('Recompression failed', { requestId: rid, error: (error as Error).message });
       next(error);
     }
   }
 
   static async useOriginal(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media) throw new NotFoundError('Media not found');
+
+      logger.info('Switching to original file', { requestId: rid, mediaId: media.id });
 
       await MediaService.update(media.id, {
         is_compressed: false,
@@ -269,12 +325,15 @@ export class MediaController {
   }
 
   static async updateFileName(req: Request, res: Response, next: NextFunction) {
+    const rid = req.requestId;
     try {
       const media = await MediaService.getById(Number(req.params.id));
       if (!media) throw new NotFoundError('Media not found');
 
       const { fileName } = req.body;
       if (!fileName) throw new ValidationError('File name is required');
+
+      logger.info('Updating file name', { requestId: rid, mediaId: media.id, oldName: media.original_name, newName: fileName });
 
       const updated = await MediaService.update(media.id, {
         original_name: fileName,

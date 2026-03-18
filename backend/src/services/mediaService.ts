@@ -9,8 +9,10 @@ import path from 'path';
 
 export class MediaService {
   static async create(data: Partial<Media>): Promise<Media> {
+    logger.debug('DB insert: media', { originalName: data.original_name, companyId: data.company_id });
     const [id] = await db('media').insert(data);
     await cacheDel('media:all');
+    logger.debug('DB insert complete: media', { id });
     return db('media').where({ id }).first();
   }
 
@@ -64,8 +66,12 @@ export class MediaService {
 
   static async getById(id: number): Promise<Media | undefined> {
     const cached = await cacheGet(`media:${id}`);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      logger.debug('Cache hit: media', { id });
+      return JSON.parse(cached);
+    }
 
+    logger.debug('Cache miss, querying DB: media', { id });
     const media = await db('media')
       .leftJoin('companies', 'media.company_id', 'companies.id')
       .select('media.*', 'companies.company_name', 'companies.slug as company_slug')
@@ -79,12 +85,14 @@ export class MediaService {
   }
 
   static async updateStatus(id: number, status: string, extra?: Partial<Media>): Promise<void> {
+    logger.debug('DB update: media status', { id, status });
     await db('media').where({ id }).update({ status, ...extra, updated_at: db.fn.now() });
     await cacheDel(`media:${id}`);
     await cacheDel('media:all');
   }
 
   static async update(id: number, data: Partial<Media>): Promise<Media> {
+    logger.debug('DB update: media', { id, fields: Object.keys(data) });
     await db('media').where({ id }).update({ ...data, updated_at: db.fn.now() });
     await cacheDel(`media:${id}`);
     await cacheDel('media:all');
@@ -104,15 +112,16 @@ export class MediaService {
     for (const filePath of filesToDelete) {
       try {
         await fs.unlink(path.resolve(filePath));
+        logger.debug('File deleted', { id, path: filePath });
       } catch (e) {
-        logger.warn(`Failed to delete file: ${filePath}`);
+        logger.warn('Failed to delete file from disk', { id, path: filePath, error: (e as Error).message });
       }
     }
 
     await db('media').where({ id }).delete();
     await cacheDel(`media:${id}`);
     await cacheDel('media:all');
-    logger.info(`Deleted media ${id}`);
+    logger.info('Media record deleted', { id, fileName: media.original_name });
   }
 
   static async bulkDelete(ids: number[]): Promise<void> {

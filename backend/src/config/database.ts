@@ -27,10 +27,10 @@ export const db = knex(config);
 export async function initDatabase(): Promise<void> {
   try {
     await db.raw('SELECT 1');
-    logger.info('Database connected successfully');
+    logger.info('Database connected', { host: env.db.host, database: env.db.name });
     await runMigrations();
-  } catch (error) {
-    logger.error('Database connection failed:', error);
+  } catch (error: any) {
+    logger.error('Database connection failed', { host: env.db.host, database: env.db.name, error: error.message });
     throw error;
   }
 }
@@ -47,7 +47,7 @@ async function runMigrations(): Promise<void> {
           table.timestamp('updated_at').defaultTo(db.fn.now());
           table.index(['slug']);
         });
-        logger.info('Created companies table');
+        logger.info('Migration: created companies table');
       }
     });
 
@@ -84,7 +84,7 @@ async function runMigrations(): Promise<void> {
           table.index(['file_type']);
           table.index(['created_at']);
         });
-        logger.info('Created media table');
+        logger.info('Migration: created media table');
       }
     });
 
@@ -103,12 +103,13 @@ async function runMigrations(): Promise<void> {
           table.index(['company_id']);
           table.index(['status']);
         });
-        logger.info('Created upload_sessions table');
+        logger.info('Migration: created upload_sessions table');
       }
     });
 
-  } catch (error) {
-    logger.error('Migration failed:', error);
+    logger.info('Database migrations completed');
+  } catch (error: any) {
+    logger.error('Migration failed', { error: error.message, stack: error.stack });
     throw error;
   }
 }

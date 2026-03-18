@@ -15,7 +15,7 @@ const videoWorker = new Worker<VideoJobData>(
   async (job: Job<VideoJobData>) => {
     const { mediaId, inputPath, outputFilename } = job.data;
 
-    logger.info(`Processing video ${mediaId}: ${outputFilename}`);
+    logger.info('Video worker: job started', { jobId: job.id, mediaId, file: outputFilename });
     await MediaService.updateStatus(mediaId, 'processing');
 
     try {
@@ -24,8 +24,8 @@ const videoWorker = new Worker<VideoJobData>(
       let thumbnailPath = '';
       try {
         thumbnailPath = await VideoService.generateVideoThumbnail(inputPath, outputFilename);
-      } catch (e) {
-        logger.warn(`Thumbnail generation failed for video ${mediaId}`);
+      } catch (e: any) {
+        logger.warn('Video worker: thumbnail generation failed', { jobId: job.id, mediaId, error: e.message });
       }
 
       await MediaService.update(mediaId, {
@@ -40,13 +40,26 @@ const videoWorker = new Worker<VideoJobData>(
         status: 'completed',
       });
 
-      logger.info(`Video ${mediaId} processed successfully`);
+      logger.info('Video worker: job completed', {
+        jobId: job.id,
+        mediaId,
+        originalSize: result.originalSize,
+        compressedSize: result.compressedSize,
+        ratio: `${result.compressionRatio.toFixed(1)}%`,
+        duration: result.duration,
+      });
+
       return result;
     } catch (error: any) {
       await MediaService.updateStatus(mediaId, 'failed', {
         error_message: error.message,
       } as any);
-      logger.error(`Video ${mediaId} processing failed:`, error);
+      logger.error('Video worker: job failed', {
+        jobId: job.id,
+        mediaId,
+        error: error.message,
+        stack: error.stack,
+      });
     }
   },
   {
@@ -56,11 +69,11 @@ const videoWorker = new Worker<VideoJobData>(
 );
 
 videoWorker.on('completed', (job) => {
-  logger.info(`Video job ${job.id} completed`);
+  logger.debug('Video worker: event completed', { jobId: job.id });
 });
 
 videoWorker.on('failed', (job, err) => {
-  logger.error(`Video job ${job?.id} failed:`, err);
+  logger.error('Video worker: event failed', { jobId: job?.id, error: err.message });
 });
 
 export { videoWorker };

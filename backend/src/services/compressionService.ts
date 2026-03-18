@@ -28,6 +28,13 @@ export class CompressionService {
     const originalStats = await fs.stat(inputPath);
     const ext = path.extname(inputPath).toLowerCase();
 
+    logger.info('Image compression started', {
+      file: outputFilename,
+      method,
+      originalSize: originalStats.size,
+      ext,
+    });
+
     let result: CompressionResult;
 
     switch (method) {
@@ -37,7 +44,14 @@ export class CompressionService {
         break;
     }
 
-    logger.info(`Compressed ${outputFilename} using ${method}: ${originalStats.size} -> ${result.compressedSize} (${result.compressionRatio.toFixed(1)}%)`);
+    logger.info('Image compression completed', {
+      file: outputFilename,
+      method,
+      originalSize: result.originalSize,
+      compressedSize: result.compressedSize,
+      ratio: `${result.compressionRatio.toFixed(1)}%`,
+    });
+
     return result;
   }
 
@@ -105,6 +119,8 @@ export class CompressionService {
 
     const ext = path.extname(inputPath).toLowerCase();
 
+    logger.debug('Generating thumbnail', { file: outputFilename });
+
     await sharp(inputPath, { animated: false })
       .resize(300, 300, { fit: 'cover', position: 'center' })
       .jpeg({ quality: 70 })
@@ -129,6 +145,17 @@ export class CompressionService {
       resize?: { width: number; height: number };
     }
   ): Promise<string> {
+    logger.info('Image edit operation', {
+      input: path.basename(inputPath),
+      operations: {
+        crop: !!operations.crop,
+        rotate: operations.rotate,
+        flip: operations.flip,
+        flop: operations.flop,
+        resize: operations.resize,
+      },
+    });
+
     let pipeline = sharp(inputPath);
 
     if (operations.crop) {
@@ -148,6 +175,7 @@ export class CompressionService {
     }
 
     await pipeline.toFile(outputPath);
+    logger.debug('Image edit written', { output: path.basename(outputPath) });
     return outputPath;
   }
 }

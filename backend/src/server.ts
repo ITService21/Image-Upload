@@ -1,12 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import path from 'path';
 import { env } from './config/env';
 import { initDatabase } from './config/database';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
 import { stripSensitiveHeaders } from './middleware/security';
 import { MediaController } from './controllers/mediaController';
 import uploadRoutes from './routes/uploadRoutes';
@@ -17,7 +17,6 @@ import './workers/imageWorker';
 import './workers/videoWorker';
 
 const app = express();
-
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin: [
@@ -29,10 +28,10 @@ app.use(cors({
   ],
   credentials: true,
 }));
-app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(stripSensitiveHeaders);
+app.use(requestLogger);
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/media', mediaRoutes);
@@ -55,11 +54,10 @@ async function startServer() {
     await initDatabase();
 
     app.listen(env.port, () => {
-      logger.info(`Server running on port ${env.port}`);
-      logger.info(`Environment: ${env.nodeEnv}`);
+      logger.info('Server started', { port: env.port, env: env.nodeEnv });
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('Failed to start server', { error });
     process.exit(1);
   }
 }
