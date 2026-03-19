@@ -16,25 +16,10 @@ export class MediaService {
     return db('media').where({ id }).first();
   }
 
-  static async getAll(filters?: {
-    companyId?: number;
-    status?: string;
-    search?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: Media[]; total: number; page: number; totalPages: number }> {
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 50;
-    const offset = (page - 1) * limit;
-
-    let query = db('media')
-      .leftJoin('companies', 'media.company_id', 'companies.id')
-      .select(
-        'media.*',
-        'companies.company_name',
-        'companies.slug as company_slug'
-      );
-
+  private static applyFilters(
+    query: ReturnType<typeof db>,
+    filters?: { companyId?: number; status?: string; search?: string }
+  ) {
     if (filters?.companyId) {
       query = query.where('media.company_id', filters.companyId);
     }
@@ -47,14 +32,42 @@ export class MediaService {
           .orWhere('companies.company_name', 'like', `%${filters.search}%`);
       });
     }
+    return query;
+  }
 
-    const countResult = await query.clone().count('media.id as count').first();
-    const total = (countResult as any)?.count || 0;
+  static async getAll(filters?: {
+    companyId?: number;
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: Media[]; total: number; page: number; totalPages: number }> {
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 50;
+    const offset = (page - 1) * limit;
 
-    const data = await query
+    logger.debug('MediaService.getAll', { filters: { ...filters } });
+
+    const countQuery = this.applyFilters(
+      db('media').leftJoin('companies', 'media.company_id', 'companies.id'),
+      filters
+    ).count('media.id as count').first();
+
+    const dataQuery = this.applyFilters(
+      db('media')
+        .leftJoin('companies', 'media.company_id', 'companies.id')
+        .select('media.*', 'companies.company_name', 'companies.slug as company_slug'),
+      filters
+    )
       .orderBy('media.created_at', 'desc')
       .limit(limit)
       .offset(offset);
+
+    const [countResult, data] = await Promise.all([countQuery, dataQuery]);
+
+    const total = Number((countResult as any)?.count) || 0;
+
+    logger.debug('MediaService.getAll result', { total, returned: data.length, page });
 
     return {
       data,
