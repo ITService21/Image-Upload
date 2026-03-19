@@ -13,7 +13,12 @@ export class MediaService {
     const [id] = await db('media').insert(data);
     await cacheDel('media:all');
     logger.debug('DB insert complete: media', { id });
-    return db('media').where({ id }).first();
+    const media = await db('media')
+      .leftJoin('companies', 'media.company_id', 'companies.id')
+      .select('media.*', 'companies.company_name', 'companies.slug as company_slug')
+      .where('media.id', id)
+      .first();
+    return media ? this.withLiveUrl(media) : media;
   }
 
   private static applyFilters(
@@ -70,7 +75,7 @@ export class MediaService {
     logger.debug('MediaService.getAll result', { total, returned: data.length, page });
 
     return {
-      data,
+      data: data.map((m: Media) => this.withLiveUrl(m)),
       total,
       page,
       totalPages: Math.ceil(total / limit),
@@ -81,7 +86,7 @@ export class MediaService {
     const cached = await cacheGet(`media:${id}`);
     if (cached) {
       logger.debug('Cache hit: media', { id });
-      return JSON.parse(cached);
+      return this.withLiveUrl(JSON.parse(cached));
     }
 
     logger.debug('Cache miss, querying DB: media', { id });
@@ -93,6 +98,7 @@ export class MediaService {
 
     if (media) {
       await cacheSet(`media:${id}`, JSON.stringify(media), 600);
+      return this.withLiveUrl(media);
     }
     return media;
   }
@@ -109,7 +115,12 @@ export class MediaService {
     await db('media').where({ id }).update({ ...data, updated_at: db.fn.now() });
     await cacheDel(`media:${id}`);
     await cacheDel('media:all');
-    return db('media').where({ id }).first();
+    const media = await db('media')
+      .leftJoin('companies', 'media.company_id', 'companies.id')
+      .select('media.*', 'companies.company_name', 'companies.slug as company_slug')
+      .where('media.id', id)
+      .first();
+    return media ? this.withLiveUrl(media) : media;
   }
 
   static async delete(id: number): Promise<void> {
@@ -174,5 +185,12 @@ export class MediaService {
 
   static generatePublicUrl(companySlug: string, fileName: string): string {
     return `${env.baseUrl}/media/${companySlug}/${fileName}`;
+  }
+
+  static withLiveUrl<T extends Media>(media: T): T {
+    if (media.company_slug && media.file_name) {
+      media.public_url = this.generatePublicUrl(media.company_slug, media.file_name);
+    }
+    return media;
   }
 }
